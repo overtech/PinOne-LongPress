@@ -1,0 +1,15 @@
+{
+  "name": "pinone-config-tool",
+  "description": "PinOne Config Tool",
+  "author": {
+    "name": "Philip Ellis",
+    "email": "sales@clevelandsoftwaredesign.com"
+  },
+  "version": "2.2.1",
+  "main": "main.js",
+  "private": true,
+  "dependencies": {
+    "node-hid": "^3.1.2",
+    "serialport": "^12.0.0"
+  }
+}

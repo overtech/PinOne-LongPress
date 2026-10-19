@@ -1,0 +1,154 @@
+#include "Outputs.h"
+#include <Arduino.h>
+#include <Adafruit_PWMServoDriver.h>
+#include <Wire.h>
+#include "Enums.h"
+#include "Globals.h"
+
+Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver(0x40);
+Adafruit_PWMServoDriver pwm1 = Adafruit_PWMServoDriver(0x41);
+Adafruit_PWMServoDriver pwm2 = Adafruit_PWMServoDriver(0x42);
+Outputs::Outputs() {
+   for (int index = 0; index < numberOutputs; index++) {
+    pinMode(outputList[index], OUTPUT);
+   }
+   
+  
+  //if (DEBUG) {Serial.print(F("DEBUG,Communication: pins initialized\r\n"));}
+}
+
+void Outputs::init() {
+  pwm.begin();
+  pwm.setOscillatorFrequency(27000000);
+  pwm.setPWMFreq(90);  // This is the maximum PWM frequency
+  pwm1.begin();
+  pwm1.setOscillatorFrequency(27000000);
+  pwm1.setPWMFreq(90);  // This is the maximum PWM frequency
+  pwm2.begin();
+  pwm2.setOscillatorFrequency(27000000);
+  pwm2.setPWMFreq(90);  // This is the maximum PWM frequency
+  Wire.setClock(400000);
+  Wire.setWireTimeout(3000, true);
+
+  turnOff();
+
+}
+
+void Outputs::turnOff() {
+  for (int i = 0; i < 62; i++) {
+    updateOutput(i, 0);
+  }
+}
+
+void Outputs::updateOutput(unsigned char outputId, unsigned char outputValue) {
+  if (outputValue > config.maxOutputState[outputId]) {
+    outputValue = config.maxOutputState[outputId];
+  }
+  if (config.nightMode == true && (config.toySpecialOption[outputId] == NOISY || config.toySpecialOption[outputId] == SHARED)) {
+    outputValue = 0;
+  }
+  // Serial.print(F("DEBUG,outputID: "));
+  // Serial.print(outputId);
+  // Serial.print(F(" outputValue: "));
+  // Serial.print(outputValue);
+  // Serial.print(F("\r\n"));
+  if (config.toySpecialOption[outputId] == SHARED && outputValue > 0 && outputValues[outputId] > 0) {
+    for (int i = 0; i < 9; i++) {
+      if(config.toySpecialOption[i] == SHARED && outputValues[i] == 0) {
+        outputId = i;
+        virtualOutputOn[i] = 1;
+        // Serial.print(F("DEBUG,switching to port "));
+        // Serial.print(outputId);
+        // Serial.print(F("\r\n"));
+        break;
+      }
+    }
+  }
+  if (config.toySpecialOption[outputId] == SHARED && outputValue == 0 && outputId < 10) {
+    if (virtualOutputOn[outputId] == 0) {
+      for (int i = 0; i < 9; i++) {
+        if(config.toySpecialOption[i] == SHARED && outputValues[i] > 0 && virtualOutputOn[i] > 0) {
+          // Serial.print(F("DEBUG,turning off port "));
+          // Serial.print(i);
+          // Serial.print(F("\r\n"));
+          updateOutputInternal(i, 0);
+          virtualOutputOn[i] = 0;
+          //Serial.print(F("DEBUG,turning off shared outputs\r\n"));
+        }
+      }
+    }
+    updateOutputInternal(outputId, outputValue);
+  } else {
+    updateOutputInternal(outputId, outputValue);
+  }
+}
+
+void Outputs::updateOutputInternal(unsigned char outputId, unsigned char outputValue) {
+  //if (DEBUG) {Serial.print(F("DEBUG,output ")); Serial.print(outputId); Serial.print(F(" set to ")); Serial.print(outputValue); Serial.print("\r\n");}
+  outputValues[outputId] = outputValue;
+  if (outputValue != 0) {
+    timeTurnedOn[outputId] = (uint16_t)millis();
+  }
+  if (outputId < 15) {
+    if (outputId < 5) {
+      analogWrite(outputList[outputId], outputValue);
+    } else {
+      if (config.bluetoothEnable == true && outputId == 10) {
+        return; // do not update the bluetooth output if bluetooth is enabled, as this pin is being used by SS
+      }
+      if (outputValue > 127) {
+        digitalWrite(outputList[outputId], HIGH);
+      } else {
+        digitalWrite(outputList[outputId], LOW);
+      }
+    }
+  } else {
+    // if the output is the button board output, then invert the value
+    if (outputId < 31 && config.reverseButtonOutputPolarity == true) {
+      outputValue = 255 - outputValue;
+    }
+    if (outputValue == 255) {
+      updateOutputActual(outputId - 15, 4096, 0);
+    } else if (outputValue == 0) {
+      updateOutputActual(outputId - 15, 0, 4096);
+    } else {
+      updateOutputActual(outputId - 15, 1, outputValue * 16);
+    }
+  }
+  
+
+}
+
+void Outputs::checkResetOutputs() {
+  uint16_t t1 = (uint16_t)millis();
+  for(int i = 0; i < 5; i++) {
+    resetOutputNumber = (resetOutputNumber + 1) % 63;
+    if (outputValues[resetOutputNumber] > config.turnOffState[resetOutputNumber] && config.maxOutputTime[resetOutputNumber] > 0) {
+      if ((uint16_t)(t1 - timeTurnedOn[resetOutputNumber]) >= (uint16_t)config.maxOutputTime[resetOutputNumber] * 100U) {
+        updateOutput(resetOutputNumber, config.turnOffState[resetOutputNumber]);
+      }
+    }
+  }
+}
+
+void Outputs::updateOutputActual(unsigned char outputId, int outputValueStart, int outputValueFinish) {
+  if (outputId < 16) {
+    pwm.setPWM(outputId, outputValueStart, outputValueFinish);
+  }
+  else if (outputId >= 16 && outputId < 32) {
+    pwm1.setPWM(outputId - 16, outputValueStart, outputValueFinish);
+  }
+  else if (outputId >= 32 && outputId < 48) {
+    pwm2.setPWM(outputId - 32, outputValueStart, outputValueFinish);
+  }
+}
+
+void Outputs::sendOutputState() {
+  Serial.print(F("O,"));
+  for (int i = 0; i < 63; i++) {
+    Serial.print(outputValues[i]);
+    Serial.print(F(","));
+  }
+  Serial.print(config.nightMode);
+  Serial.print(F("\r\n"));
+}
