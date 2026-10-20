@@ -135,13 +135,10 @@ bool Buttons::sendButtonPush(unsigned char i, bool currentButtonState)
     numberButtonsPressed++;
   }
 
-  // Per-input Long Press handling (when enabled, short press fires as a 50ms pulse on release)
-  // Product guards: Shift modifier and Night Mode Toggle are incompatible with Long Press.
-  // (Night Mode Push Button <32 and mapping 254 remain compatible.)
-  bool lpIncompatible =
-      (config.shiftButton < 24 && config.shiftButton == i) ||
-      (config.nightModeButton >= 32 && config.nightModeButton < 64 &&
-       (config.nightModeButton % 32) == i);
+  // Per-input Long Press handling (when enabled, short press fires as a 50ms pulse on release).
+  // Shift is a modifier and cannot use Long Press.
+  // Night Mode Button Toggle (nightModeButton >= 32) may use Long Press.
+  bool lpIncompatible = (config.shiftButton < 24 && config.shiftButton == i);
   if (i < 24 && config.buttonLongPressTime[i] > 0 && !lpIncompatible)
   {
     if (currentButtonState == 1)
