@@ -59,7 +59,7 @@ class SimulatedBoard {
         this.accelY = 0;
         this.buttonStates = new Array(32).fill(0);
         this.outputStates = new Array(32).fill(0);
-        this.version = [2, 2, 1];
+        this.version = [2, 3, 0];
         this.mockSerialPort = new MockSerialPort({
             path: 'SIMULATED',
             baudRate: 2000000,

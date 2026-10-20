@@ -38,6 +38,9 @@ void setup() {
 }
 
 void loop() {
+  // Advance non-blocking night-mode / KB-mode light+solenoid feedback every pass
+  lightShow.updateFeedback();
+
   // Handle input processing (same as original)
   //unsigned long t1 = micros();
   if (toggle == 0) {

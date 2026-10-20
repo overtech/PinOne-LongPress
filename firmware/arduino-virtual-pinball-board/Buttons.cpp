@@ -34,7 +34,11 @@ bool Buttons::checkChanged()
   {
     if (lpState[i] == LP_WAITING)
     {
-      uint16_t threshold = (uint16_t)config.buttonLongPressTime[i] * 1000U;
+      uint8_t secs = config.buttonLongPressTime[i];
+      if (secs > MAX_LONG_PRESS_SEC) {
+        secs = MAX_LONG_PRESS_SEC;
+      }
+      uint16_t threshold = (uint16_t)secs * 1000U;
       if ((uint16_t)(now16 - lpTimer[i]) >= threshold)
       {
         lpState[i] = LP_FIRED_HOLD;
@@ -132,7 +136,13 @@ bool Buttons::sendButtonPush(unsigned char i, bool currentButtonState)
   }
 
   // Per-input Long Press handling (when enabled, short press fires as a 50ms pulse on release)
-  if (i < 24 && config.buttonLongPressTime[i] > 0)
+  // Product guards: Shift modifier and Night Mode Toggle are incompatible with Long Press.
+  // (Night Mode Push Button <32 and mapping 254 remain compatible.)
+  bool lpIncompatible =
+      (config.shiftButton < 24 && config.shiftButton == i) ||
+      (config.nightModeButton >= 32 && config.nightModeButton < 64 &&
+       (config.nightModeButton % 32) == i);
+  if (i < 24 && config.buttonLongPressTime[i] > 0 && !lpIncompatible)
   {
     if (currentButtonState == 1)
     {
@@ -208,32 +218,67 @@ void Buttons::dispatchButtonEvents(unsigned char i, bool currentButtonState)
     }
   }
 
-  // Trigger IR command on button press (rising edge only)
-  if (currentButtonState && config.irOutputPin < 15 && config.irButton == i)
+  // Trigger IR command on button press (rising edge only).
+  // Input marked via irButton and/or buttonRemap == BUTTON_MAP_IR (252).
+  if (currentButtonState)
   {
-    irTransmit.sendCommand(outputs.outputList[config.irOutputPin]);
+    bool isIrButton = (config.irButton == i) || (i < 32 && config.buttonRemap[i] == BUTTON_MAP_IR);
+    if (isIrButton)
+    {
+      uint8_t irOut = config.irOutputPin;
+      if (irOut >= 15)
+      {
+        for (uint8_t o = 0; o < 15; o++)
+        {
+          if (config.toySpecialOption[o] == IR)
+          {
+            irOut = o;
+            break;
+          }
+        }
+      }
+      if (irOut < 15)
+      {
+        irTransmit.sendCommand(outputs.outputList[irOut]);
+      }
+    }
   }
 }
 
 static void triggerNightModeFeedback()
 {
-  lightShow.flashLights();
-  if (!config.nightMode)
-  {
-    outputs.updateOutput(0, 255);
-    delay(60);
-    outputs.updateOutput(0, 0);
-    delay(80);
-    outputs.updateOutput(1, 255);
-    delay(60);
-    outputs.updateOutput(1, 0);
-  }
+  lightShow.startNightModeFeedback(config.nightMode);
 }
 
 void Buttons::sendLongPressAction(unsigned char i, bool currentButtonState)
 {
   unsigned char lpKey = config.buttonLongPressKeyboard[i];
   unsigned char lpBtn = config.buttonLongPressRemap[i];
+
+  // Special option 252: Trigger IR on long-press rising edge
+  if (lpBtn == BUTTON_MAP_IR)
+  {
+    if (currentButtonState)
+    {
+      uint8_t irOut = config.irOutputPin;
+      if (irOut >= 15)
+      {
+        for (uint8_t o = 0; o < 15; o++)
+        {
+          if (config.toySpecialOption[o] == IR)
+          {
+            irOut = o;
+            break;
+          }
+        }
+      }
+      if (irOut < 15)
+      {
+        irTransmit.sendCommand(outputs.outputList[irOut]);
+      }
+    }
+    return;
+  }
 
   // Special option 253: Toggle Night Mode on long press
   if (lpBtn == 253)
@@ -329,6 +374,23 @@ void Buttons::sendActualButtonPress(unsigned char buttonOffset, bool currentButt
       }
     }
     // Don't process this button as a joystick/keyboard press
+    return;
+  }
+
+  // IR-only mapping: no keyboard/gamepad HID (IR fired in dispatchButtonEvents)
+  if (config.buttonRemap[buttonOffset] == BUTTON_MAP_IR)
+  {
+    return;
+  }
+
+  // Short-press KB/Gamepad toggle (same action as long-press remap 254)
+  if (config.buttonRemap[buttonOffset] == BUTTON_MAP_KB_TOGGLE)
+  {
+    if (currentButtonState && config.disableButtonPressWhenKeyboardEnabled != 2)
+    {
+      config.disableButtonPressWhenKeyboardEnabled = !config.disableButtonPressWhenKeyboardEnabled;
+      lightShow.flashLights();
+    }
     return;
   }
 

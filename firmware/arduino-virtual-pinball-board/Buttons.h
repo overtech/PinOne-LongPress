@@ -24,6 +24,8 @@ class Buttons {
     static const uint8_t LP_FIRED_HOLD = 2;
     static const uint8_t LP_SHORT_PULSE = 3;
     static const uint16_t SHORT_PRESS_PULSE_MS = 50;
+    // Cap hold time so (seconds * 1000) fits in uint16_t elapsed compares (< 65.535s)
+    static const uint8_t MAX_LONG_PRESS_SEC = 60;
 
     uint8_t lpState[24] = {0};
     uint16_t lpTimer[24] = {0};

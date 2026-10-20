@@ -112,14 +112,96 @@ void LightShow::setLightsOff() {
   }
 }
 
-void LightShow::flashLights() {
-  for (uint8_t f = 0; f < 3; f++) {
-    for (uint8_t i = startLight; i < finishLight; i++) {
-      if (isLightShowOutput(i)) updateLightValue(i, 255);
+void LightShow::setFlashLightsOn() {
+  for (uint8_t i = startLight; i < finishLight; i++) {
+    if (isLightShowOutput(i)) {
+      updateLightValue(i, 255);
     }
-    delay(100);
-    setLightsOff();
-    delay(100);
+  }
+}
+
+void LightShow::beginFlashSequence(bool withSolenoidChirp) {
+  feedbackSolenoids = withSolenoidChirp;
+  feedbackPhase = 1;
+  flashCycle = 0;
+  flashSub = 0;
+  feedbackTimer = millis();
+  setFlashLightsOn();
+}
+
+void LightShow::flashLights() {
+  beginFlashSequence(false);
+}
+
+void LightShow::startNightModeFeedback(bool nightModeEnabled) {
+  // When night mode is OFF again, chirp outputs 0 then 1 after the flash.
+  beginFlashSequence(!nightModeEnabled);
+}
+
+void LightShow::updateFeedback() {
+  if (feedbackPhase == 0) {
+    return;
+  }
+
+  uint32_t now = millis();
+  uint32_t elapsed = now - feedbackTimer;
+
+  if (feedbackPhase == 1) {
+    if (flashSub == 0) {
+      if (elapsed < 100) {
+        return;
+      }
+      setLightsOff();
+      flashSub = 1;
+      feedbackTimer = now;
+    } else {
+      if (elapsed < 100) {
+        return;
+      }
+      flashCycle++;
+      if (flashCycle >= 3) {
+        if (feedbackSolenoids) {
+          outputs.updateOutput(0, 255);
+          feedbackPhase = 2;
+          feedbackTimer = now;
+        } else {
+          feedbackPhase = 0;
+        }
+      } else {
+        setFlashLightsOn();
+        flashSub = 0;
+        feedbackTimer = now;
+      }
+    }
+    return;
+  }
+
+  if (feedbackPhase == 2) {
+    if (elapsed < 60) {
+      return;
+    }
+    outputs.updateOutput(0, 0);
+    feedbackPhase = 3;
+    feedbackTimer = now;
+    return;
+  }
+
+  if (feedbackPhase == 3) {
+    if (elapsed < 80) {
+      return;
+    }
+    outputs.updateOutput(1, 255);
+    feedbackPhase = 4;
+    feedbackTimer = now;
+    return;
+  }
+
+  if (feedbackPhase == 4) {
+    if (elapsed < 60) {
+      return;
+    }
+    outputs.updateOutput(1, 0);
+    feedbackPhase = 0;
   }
 }
 

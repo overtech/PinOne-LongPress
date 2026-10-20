@@ -41,7 +41,16 @@ enum output_type {
   LIGHT_SHOW_MEDIUM = 2,
   LIGHT_SHOW_HIGH = 3,
   SHARED = 4,
+  IR = 5, // IR LED output (pairs with irOutputPin / button mapping IR)
 };
+
+// Special buttonRemap / long-press remap codes (not gamepad buttons)
+// 252 = Trigger IR (normal Button Mapping and/or long-press remap)
+// 253 = Toggle Night Mode (long press)
+// 254 = Toggle KB/Gamepad Mode (long press)
+static const uint8_t BUTTON_MAP_IR = 252;
+static const uint8_t BUTTON_MAP_NIGHT_MODE = 253;
+static const uint8_t BUTTON_MAP_KB_TOGGLE = 254;
 
 enum eeprom {
   PLUNGER_MIN = 1,
